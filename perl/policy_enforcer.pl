@@ -1,48 +1,27 @@
+#!/usr/bin/perl
 # Copyright (C) 2026 AHMAD ALI PARR
 # This file is part of the Sovereign Canvas Machine (SCM-002).
 # Licensed under the GNU Affero General Public License v3.0.
 # See LICENSE for details.
 
-#!/usr/bin/perl
-# policy_enforcer.pl — Pure-Perl deny-by-default enforcer for Milestone 1
-# Mirrors Prolog policy; full Prolog evaluation requires external interpreter
-
 use strict;
 use warnings;
+use FindBin;
+use lib $FindBin::Bin;
+use SCM::Policy qw(decide_braid_words);
 
-my ($workspace, $target, $candidate) = @ARGV;
+# Three-argument form is the braid oracle used by the unit tests:
+#   perl policy_enforcer.pl BRAID '<target>' '<candidate>'
+# It does not consult a shell and does not grant authority by itself.
 
-# Allowed generators
-my %generators = map { $_ => 1 } qw(s1 s2 s1_inv s2_inv);
-
-sub valid_word {
-    my ($word) = @_;
-    return 0 unless defined $word;
-    my @gens = split /\s+/, $word;
-    return 0 unless @gens;
-    for my $g (@gens) {
-        return 0 unless $generators{$g};
-    }
-    return 1;
-}
-
-# Deny by default
-unless ($workspace && $workspace eq "BRAID") {
-    print "DENY:unknown_workspace\n";
+if (@ARGV != 3) {
+    print "DENY:usage\n";
     exit 1;
 }
-
-unless (valid_word($target) && valid_word($candidate)) {
-    print "DENY:invalid_word\n";
-    exit 1;
-}
-
-# Simple equivalence check for the fixture (s1 s2 s1 is the target)
-# In full system this comes from Lean or trusted checker
-if ($target eq "s1 s2 s1" && $candidate eq "s1 s2 s1") {
-    print "ALLOW:fixture_equivalence\n";
+my ($ok, $reason) = decide_braid_words(@ARGV);
+if ($ok) {
+    print "ALLOW:$reason\n";
     exit 0;
 }
-
-print "DENY:no_trusted_equivalence\n";
+print "DENY:$reason\n";
 exit 1;

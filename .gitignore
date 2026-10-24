@@ -1,0 +1,4 @@
+ledger/chain.jsonl
+build/
+*.o
+scm-native

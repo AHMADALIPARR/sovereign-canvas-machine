@@ -1,14 +1,12 @@
 # Copyright (C) 2026 AHMAD ALI PARR
-# Sovereign Canvas Machine — Makefile
-# Licensed under the GNU Affero General Public License v3.0.
+# Sovereign Canvas Machine (SCM-002). AGPL-3.0-only.
+
+ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
 .PHONY: test clean
 
 test:
-	@echo "=== SCM Milestone 1 Tests ==="
-	@perl tests/test_canvas_protocol.pl
-	@perl tests/test_policy.pl
-	@echo "=== Tests complete ==="
+	cd $(ROOT) && perl tests/suite.pl
 
 clean:
-	rm -rf /tmp/scm-test-*
+	rm -rf $(ROOT)/build $(ROOT)/ledger/chain.jsonl

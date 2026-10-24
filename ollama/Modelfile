@@ -1,0 +1,12 @@
+# SCM-002 model file. No TOOL lines exist. A model that needs tools cannot be
+# expressed here. The host wrapper rejects tool-call syntax before any launch.
+
+FROM scratch
+PARAMETER num_ctx 2048
+PARAMETER temperature 0
+
+SYSTEM """
+You have no tools, no shell, and no filesystem.
+Reply with one SCM-CANVAS/1.0 record and nothing else.
+STATUS must be UNVERIFIED. Do not claim a proof.
+"""

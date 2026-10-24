@@ -1,83 +1,61 @@
 # Sovereign Canvas Machine (SCM-002)
 
 ![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)
-![Status: Milestone 1](https://img.shields.io/badge/Status-Milestone%201-yellow.svg)
-![Language: Perl 5](https://img.shields.io/badge/Language-Perl%205-green.svg)
-![Language: AWK](https://img.shields.io/badge/Language-AWK-orange.svg)
 ![Policy: Deny by Default](https://img.shields.io/badge/Policy-Deny%20by%20Default-red.svg)
-![Verification: Formal](https://img.shields.io/badge/Verification-Formal-purple.svg)
 
-**Topics:** formal-verification · braid-group · prolog · perl5 · awk · mathematical-execution · sovereign-systems · proof-carrying-code · lean4 · compcert · hyperdag · colorforth · deny-by-default · canvas-protocol
+Proof-carrying mathematical execution. A model may submit one typed canvas record. It does not get a shell, a tool call, or the right to mark its own work verified. Two decoders must agree. Policy is deny-by-default. A second implementation, in C, must recompute the same invariant. Only then can the ColorForth ceremony seal a hash-chained ledger line.
 
----
+Copyright (C) 2026 AHMAD ALI PARR. Licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
 
-## Overview
+## What actually runs
 
-The Sovereign Canvas Machine (SCM-002) is a proof-carrying mathematical execution environment designed to enforce strict separation between untrusted model-generated proposals and authorized native execution. It implements a multi-layered architecture in which large language models may only submit bounded, typed proposals through a restricted Canvas protocol. Every subsequent stage—decoding, policy authorization, optimization, transformation, verification, compilation, and execution—is governed by independent, fail-closed mechanisms. No proposal becomes executable authority without explicit authorization and independently checked evidence.
+`make test` executes all of the following. There is no separate "milestone 2" directory left as a placeholder.
 
-This repository contains the Milestone 1 vertical slice: a working Perl 5 orchestrator, AWK decoder, typed Canvas protocol, and deny-by-default policy enforcer. The system accepts a valid three-strand braid fixture and rejects malformed or unauthorized proposals. All source files carry AGPLv3 headers. External components (QEMU-contained Ollama, Lean 4 + Mathlib, CompCert, full Prolog evaluation, ColorForth) are documented as blocked or deferred pending availability of the corresponding toolchains.
+| Stage | Where | Decision |
+|---|---|---|
+| Decode | `awk/canvas_decoder.awk` and `perl/SCM/Decode.pm` | Both must agree |
+| ADR seal | `adr/DIGEST` | Digest mismatch rejects everything |
+| Policy | `perl/SCM/Policy.pm` | Deny by default |
+| Braid equality | Artin action on F3 | Faithful for B3, not string compare |
+| Clifford equality | Tableau for H, X, Y, Z, S, SDG, CNOT, CZ | Up to global phase |
+| Recurrence | Exact integer recomputation | Bound ±1e9 |
+| Bound | Permutation BFS, or one-qubit Clifford distance | Can only reject |
+| Hypergraph | `perl/SCM/HyperDAG.pm` | Diagram plus invariant |
+| Projection | `xslt/canonicalize.xsl`, applied in Perl | Terminating |
+| Native check | `compcert/scm_rt.c` compiled with gcc | Must match the Perl invariant |
+| Ceremony | `bootstrap/run.pl` | Skipped word is a rejection |
+| Ledger | `perl/SCM/Ledger.pm` | SHA-256 chain, tamper-evident |
 
-The design is motivated by the observation that conventional agent frameworks grant models direct tool access or shell execution. SCM-002 inverts this model. The model proposes; the Canvas constrains; AWK decodes; Perl orchestrates; Prolog authorizes; Virtual ADRs govern; AMPL optimizes; the HyperDAG represents; XSLT transforms; Lean verifies; CompCert compiles; ColorForth controls; QEMU contains; the ledger records. Each boundary is explicit, testable, and fail-closed.
-
-## Architecture
-
-### Control Plane
-
-The control plane is implemented entirely in Perl 5 and AWK. The Perl supervisor owns the state machine, schema validation, timeout handling, resource accounting, and routing between stages. It never interpolates untrusted model output into shell commands. Subprocess execution uses argument vectors and explicitly controlled environments. The AWK decoder performs deterministic, bounded parsing of the line-oriented Canvas protocol. Maximum line length and record size are enforced before any further processing.
-
-### Sovereign Canvas Protocol
-
-The Canvas is the only interface through which an untrusted model may submit proposals. Records are line-oriented and versioned (SCM-CANVAS/1.0). Supported workspaces are BRAID, QUANTUM, and RECURRENCE. Every record must contain an intent identifier, workspace type, input digest, candidate representation, proposed transformations, resource estimates, proof obligations, and an UNVERIFIED status. Malformed, oversized, unknown, or unauthorized records are rejected before policy evaluation.
-
-### Constitutional Policy
-
-Authorization is deny-by-default. The Prolog source declares the required invariants. The model cannot mutate policy. Unrecognized operations are denied. For Milestone 1, a pure-Perl bootstrap enforcer mirrors these rules so that acceptance tests can run without an external Prolog interpreter.
-
-### Mathematical Core (Deferred)
-
-Milestone 2 will introduce a braid equivalence checker, an AMPL optimization model over three-strand generators, a typed Braided Causal HyperDAG intermediate representation, and Lean 4 + Mathlib proof obligation generation.
-
-### Transformation and Compilation (Deferred)
-
-Canonical XML intermediate representations will be transformed by terminating XSLT passes. A verified lowering path produces CompCert-compatible C/Clight. Compilation occurs in a trusted build environment outside the QEMU inference guest.
-
-### Isolation and Authority (Deferred)
-
-Ollama and Llama execute inside a QEMU guest with no model tool calls. ColorForth is the ultimate root supervisor.
-
-### Ledger
-
-An append-only hash-chained ledger records intent hashes, prompt-signature hashes, policy hashes, ADR digests, proof manifests, IR hashes, and binary hashes.
-
-## Hard Boundaries
-
-1. Model isolation. Llama cannot invoke tools or directly access host processes.
-2. Mathematical authority. Prolog enforces permissions, AMPL handles optimization, and Lean checks proofs.
-3. Native compilation. CompCert verifies its supported compilation transformations.
-
-## Milestone Status
-
-Milestone 1 (complete): Perl supervisor, AWK decoder, typed Canvas protocol, Prolog deny-by-default source, pure-Perl policy bootstrap, single braid fixture, and acceptance tests. 5/5 tests passed.
-
-Milestone 2 (next): Braid equivalence, AMPL optimization model, HyperDAG representation, Lean proof obligation generator.
-
-## Build and Test
+Workspaces are `BRAID`, `QUANTUM`, and `RECURRENCE`. The record format is [schemas/canvas_protocol.md](schemas/canvas_protocol.md).
 
 ```bash
-cd sovereign-canvas-machine
 make test
 ```
 
+Accept prints `ACCEPT: AUTHORIZED`. Anything else is a rejection and a non-zero status.
+
+```bash
+perl perl/scm_supervisor.pl < fixtures/braid_relation.txt
+perl perl/policy_enforcer.pl BRAID 's1 s2 s1' 's2 s1 s2'
+perl bootstrap/run.pl bootstrap/accept_braid.cf
+```
+
+The relation fixture is the one that used to be impossible here: target `s1 s2 s1`, candidate `s2 s1 s2`. Those are the same three-strand braid. `s1 s1 s2` is not, and it is denied.
+
+## What is source, and is not executed in this bootstrap
+
+These files are real and are not stubs. They are also not claimed to have been run, because those programs are not installed:
+
+- `lean/Kernel.lean` — the same Artin check, for Lean 4, with `native_decide` on the braid relation and on inverse cancellation.
+- `prolog/policy.pl` — the same check as a deny-by-default theory.
+- `ampl/braid_perm.mod` — the permutation lower bound as an integer program. The executed bound is the BFS.
+- CompCert. The C is written in a subset CompCert can compile. The bootstrap compiler is gcc, and an accept does not become a CompCert certificate because gcc succeeded.
+- QEMU and Ollama. Both wrappers refuse to start. `net=none`, tools disabled, tool-call syntax denied.
+
+## Boundaries
+
+Untrusted bytes are not interpolated into a shell. Children are started with argument vectors. A proposal with STATUS other than `UNVERIFIED` is rejected. A path in the ceremony may not be absolute and may not contain `..`. The ADR digest is checked before a policy decision, so a silent edit of the constitution fails closed.
+
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0. Copyright headers appear in every source file.
-
-## Contact
-
-AHMAD ALI PARR
-SnapKitty Research Lab
-Bel esprit D'accord Trust
-
----
-
-*No model-generated proposal becomes executable authority without independent verification and explicit authorization.*
+GNU Affero General Public License v3.0 only. The full text is in [LICENSE](LICENSE).
