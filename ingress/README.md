@@ -27,8 +27,11 @@ be absolute. Absolute paths and `..` are rejected.
 
 ### GGUF generate (optional local model)
 
+Default weights: **[Snapkitty/snapkitty-merged](https://huggingface.co/Snapkitty/snapkitty-merged)**
+(`snapkitty-merged.Q4_K_M.gguf`). Fetch with `models/fetch_snapkitty_merged.sh`, then:
+
 ```json
-{"op":"generate","model":"my-model.gguf","prompt":"optional extra hint"}
+{"op":"generate","model":"snapkitty-merged.Q4_K_M.gguf","prompt":"optional extra hint"}
 ```
 
 Requires `llama-cli` (or `SCM_LLAMA_BIN`) and a registered GGUF under
@@ -57,7 +60,7 @@ by the server user. No remote download — upload is local path only.
 ## Socket
 
 Default path: `$SCM_ROOT/run/scm.sock` (override with `SCM_SOCK`). Falls back
-to `/tmp/scm-<uid>.sock` when the repo tree cannot host AF_UNIX sockets.
+to `/tmp/scm-<uid>.sock` when needed.
 
 ```bash
 # start
@@ -69,9 +72,9 @@ printf '%s' "$(cat fixtures/braid_valid.txt)" | php ingress/client.php --raw
 # JSON propose
 php ingress/client.php --json '{"op":"propose","format":"canvas","path":"fixtures/braid_valid.txt"}'
 
-# register a local GGUF then generate
-php ingress/client.php --json '{"op":"register_gguf","name":"tiny.gguf","source":"/path/to/tiny.gguf"}'
-php ingress/client.php --json '{"op":"generate","model":"tiny.gguf"}'
+# default model: fetch, register, generate
+./models/fetch_snapkitty_merged.sh --register
+php ingress/client.php --json '{"op":"generate","model":"snapkitty-merged.Q4_K_M.gguf"}'
 ```
 
 ## Security bounds (deny by default)
