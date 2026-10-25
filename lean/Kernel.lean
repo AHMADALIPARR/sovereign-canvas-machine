@@ -81,10 +81,10 @@ def invariant (w : BWord) : FWord × FWord × FWord :=
 
 theorem braid_relation :
     invariant [.s1, .s2, .s1] = invariant [.s2, .s1, .s2] := by
-  native_decide
+  decide
 
 theorem inverse_cancels :
     invariant [.s1, .s1i] = invariant [.s2, .s2i] := by
-  native_decide
+  decide
 
 end SCM

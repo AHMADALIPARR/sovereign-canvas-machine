@@ -76,6 +76,19 @@ sub verify {
         my %f = map { split /=/, $_, 2 } split / /, $l;
         return (0, "prev_mismatch_$i") unless ($f{prev} // '') eq $prev;
         return (0, "index_mismatch_$i") unless ($f{index} // '') eq "$i";
+        # Format checks: the chain links alone do not prove the records
+        # are well-formed. Hashes must be 64 hex chars, time an ISO UTC
+        # timestamp, intent a single token, decision a single word.
+        for my $h (qw(proposal policy adr cert ir binary)) {
+            return (0, "format_mismatch_$i")
+                unless ($f{$h} // '') =~ /^[0-9a-f]{64}$/;
+        }
+        return (0, "format_mismatch_$i")
+            unless ($f{time} // '') =~ /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+        return (0, "format_mismatch_$i")
+            unless ($f{intent} // '') =~ /^\S+$/;
+        return (0, "format_mismatch_$i")
+            unless ($f{decision} // '') =~ /^[A-Z]+$/;
         $prev = sha256_hex($l);
         $i++;
     }

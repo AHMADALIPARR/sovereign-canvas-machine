@@ -19,9 +19,11 @@ use SCM::Policy qw(decide_braid_words);
 use SCM::Pipeline qw(run);
 use SCM::Ledger qw(append verify);
 use SCM::ADR qw(check);
-use SCM::Braid qw(invariant parse_gens);
-use SCM::Quantum qw(distance1 parse_gates tableau_key);
-use SCM::Recurrence qw(evaluate);
+use SCM::Braid qw(invariant parse_gens exact_braid_equal matrix_invariant exponent_sum);
+use SCM::Quantum qw(distance1 parse_gates tableau_key inverse_circuit);
+use SCM::Recurrence qw(evaluate sequence);
+use SCM::Optimize qw(optimize_exact);
+use SCM::HyperDAG qw(verify_xml_hashes);
 
 sub slurp {
     my ($p) = @_;
@@ -185,5 +187,107 @@ is($self, 0, 'selftest compiles');
 my $sout = `/tmp/scm-selftest`;
 like($sout, qr/SELFTEST_OK/, 'fixed identities hold in C');
 unlink '/tmp/scm-selftest';
+
+# --- Completion: identity, cross-checks, Merkle XML, AMPL, Lean, ceremony ---
+
+# Identity is a word, not an error (strict-parse fix).
+($ok, $why) = decide_braid_words('BRAID', '', '');
+ok($ok, "identity braid allowed ($why)");
+($ok, $why) = decide_braid_words('BRAID', '', 's1');
+ok(!$ok, "identity vs s1 denied ($why)");
+ok(SCM::Quantum::equivalent(1, [], []), 'identity circuit allowed');
+ok(!SCM::Quantum::equivalent(1, [], [parse_gates('X:0', 1)]), 'identity vs X denied');
+
+# Matrix cross-check on the Artin invariant, including the kernel collision.
+ok(exact_braid_equal('s1 s2 s1', 's2 s1 s2'), 'matrix+expsum agrees on braid relation');
+my $half = 's1 s2 s1 s1 s2 s1';
+my $kernel = join ' ', ($half, $half, $half, $half);
+my @kg = parse_gens($kernel);
+ok(!exact_braid_equal($kernel, ''), 'kernel word is not identity');
+is(matrix_invariant(@kg), matrix_invariant(), 'kernel word has identity matrix');
+is(exponent_sum(@kg), 24, 'kernel word has exponent sum 24');
+
+# Exact optimizer (Optimize stage beyond necessary-condition bounds).
+my ($ost, $ow, $oc, $ox) = optimize_exact('s1 s2 s1', {s1 => 2, s2 => 1}, 3, 1000);
+is($ost, 'OPTIMAL_WITHIN_BOUNDS', 'exact optimizer completes');
+is($ow, 's2,s1,s2', 'exact optimizer selects s2,s1,s2');
+is($oc, 4, 'exact optimizer cost 4');
+($ost, $ow, $oc, $ox) = optimize_exact('s1 s2 s1', {s1 => 2, s2 => 1}, 3, 32);
+is($ost, 'INCOMPLETE_SEARCH', 'exact optimizer reports budget exhaustion');
+is($ow, 's1,s2,s1', 'exact optimizer keeps best valid candidate');
+is($oc, 5, 'exact optimizer best cost 5');
+
+# Recurrence sequence + quantum inverse.
+is_deeply(sequence(2, [1, 1], [0, 1], 10), [0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55], 'fibonacci sequence');
+my @qc = parse_gates('H:0 S:0 CNOT:0:1', 2);
+my $qinv = inverse_circuit(\@qc);
+ok(SCM::Quantum::equivalent(2, [ @qc, @$qinv ], []), 'circuit times inverse is identity');
+
+# Merkle XML tree: full diagram, self-verifying, XSLT projection real.
+my $vtext = slurp("$ROOT/fixtures/braid_valid.txt");
+my $vr = run($vtext, root => $ROOT);
+like($vr->{xml}, qr/<diagram>/, 'xml carries the diagram');
+like($vr->{xml}, qr/<anyon /, 'xml carries anyon trajectories');
+like($vr->{xml}, qr/<merkle root="[0-9a-f]{64}"/, 'xml carries the merkle root');
+my ($xmok, $xmwhy) = verify_xml_hashes($vr->{xml});
+ok($xmok, "xml merkle verifies ($xmwhy)");
+like(join("\n", @{ $vr->{trace} }), qr/^xml=[0-9a-f]{64}$/m, 'trace carries xml hash');
+like(join("\n", @{ $vr->{trace} }), qr/^xslt=[0-9a-f]{64}$/m, 'trace carries xslt hash');
+like(join("\n", @{ $vr->{trace} }), qr/^merkle=[0-9a-f]{64}$/m, 'trace carries merkle root');
+my $tampered = $vr->{xml};
+$tampered =~ s/sign="1"/sign="2"/;
+my ($tmok) = verify_xml_hashes($tampered);
+ok(!$tmok, 'tampered xml fails merkle verification');
+my $xfile = "/tmp/scm-xml-$$.xml";
+open my $xf, '>', $xfile or die $!;
+print {$xf} $vr->{xml};
+close $xf;
+my $xout = `xsltproc $ROOT/xslt/canonicalize.xsl $xfile`;
+is($? >> 8, 0, 'xsltproc projects the tree');
+like($xout, qr/<invariant>1,2,3,-2,-1;1,2,-1;1<\/invariant>/, 'xslt certificate carries the invariant');
+unlink $xfile;
+
+# AMPL contract verified against the executed implementation.
+my $vout = `perl $ROOT/perl/verify_ampl.pl`;
+is($? >> 8, 0, 'AMPL model verified against Perl BFS');
+
+# Lean kernel typechecks where Lean exists.
+my $lean = '';
+for my $dir (split /:/, $ENV{PATH}) {
+    if (-x "$dir/lean") { $lean = "$dir/lean"; last }
+}
+$lean = "$ENV{HOME}/.elan/bin/lean" if !$lean && -x "$ENV{HOME}/.elan/bin/lean";
+if ($lean) {
+    is(system($lean, "$ROOT/lean/Kernel.lean"), 0, 'Kernel.lean typechecks');
+} else {
+    pass('lean not installed; kernel check skipped');
+}
+
+# Unknown obligations grant nothing.
+my $utext = slurp("$ROOT/fixtures/braid_valid.txt");
+$utext =~ s/RP-002/RP-999/;
+my $ur = run($utext, root => $ROOT);
+is($ur->{code}, 1, 'unknown obligation rejected');
+like($ur->{line}, qr/^REJECT: POLICY:unknown_obligation/, 'unknown obligation line');
+
+# Ceremony fixtures beyond the original two.
+for my $cf (qw(accept_quantum accept_recurrence)) {
+    my $sealed2 = "/tmp/scm-seal2-$$.jsonl";
+    unlink $sealed2;
+    local $ENV{SCM_LEDGER} = $sealed2;
+    local $ENV{SCM_NOW} = '2026-10-24T00:00:03Z';
+    my $cout2 = `perl $ROOT/bootstrap/run.pl bootstrap/$cf.cf`;
+    is($? >> 8, 0, "$cf ceremony accepts");
+    like($cout2, qr/^ACCEPT: AUTHORIZED/, "$cf ceremony line");
+    my ($lok2) = verify($sealed2);
+    ok($lok2, "$cf sealed ledger verifies");
+    unlink $sealed2;
+}
+my $badc2 = `perl $ROOT/bootstrap/run.pl bootstrap/bad_intent.cf`;
+like($badc2, qr/CEREMONY:intent_mismatch/, 'bad intent ceremony rejected');
+my $extra = `perl $ROOT/bootstrap/run.pl bootstrap/extra_word.cf`;
+like($extra, qr/CEREMONY/, 'extra word ceremony rejected');
+my $miss = `perl $ROOT/bootstrap/run.pl bootstrap/missing_word.cf`;
+like($miss, qr/CEREMONY/, 'missing word ceremony rejected');
 
 done_testing();
