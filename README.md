@@ -17,15 +17,17 @@ Copyright (C) 2026 AHMAD ALI PARR. Licensed under the GNU Affero General Public 
 
 ## Live pipeline (real run)
 
-Captured from this machine:
+> **Honest status:** Branch `production-ingress` has the code and this README.
+> PNG/GIF binaries were generated locally but **not** uploaded via the text-only GitHub API.
+> The diagram below is an SVG (text) so it actually renders on GitHub.
+
+Captured from a real run:
 
 ```bash
 SCM_TRACE=1 perl perl/scm_supervisor.pl < fixtures/braid_relation.txt
 ```
 
-![Live pipeline](docs/demo/pipeline-live.png)
-
-![Pipeline demo](docs/demo/pipeline-demo.gif)
+![Live pipeline](docs/demo/pipeline.svg)
 
 ### Accept path — braid relation `s1 s2 s1` ≡ `s2 s1 s2`
 
@@ -66,8 +68,6 @@ Policy fails closed **before** math seals or ledger append. No partial authority
 ---
 
 ## REPL
-
-![REPL demo](docs/demo/repl-demo.gif)
 
 ```bash
 make repl                         # direct → supervisor
