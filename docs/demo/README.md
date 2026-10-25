@@ -1,13 +1,21 @@
-# REPL demo assets
+# Demo assets (from real runs)
 
-- `repl-demo.gif` — animated terminal capture of the Read–Eval–Print loop
-- Regenerate:
+| File | What |
+|---|---|
+| `pipeline-live.png` | Full stage poster with live hashes from `braid_relation` |
+| `pipeline-demo.gif` | Accept / deny / three-workspace panels |
+| `repl-demo.gif` | REPL command walkthrough |
+
+Regenerate after a local accept:
 
 ```bash
-# from repo root (needs ImageMagick convert)
-mkdir -p docs/demo/frames
-# … write frame_*.txt then:
-convert docs/demo/frames/frame_*.png -resize 560x -delay 120 -loop 0 -layers Optimize docs/demo/repl-demo.gif
+SCM_TRACE=1 perl perl/scm_supervisor.pl < fixtures/braid_relation.txt
+# then rebuild posters with ImageMagick from docs/demo/pipeline_frames/
 ```
 
-The GIF is referenced from the top-level README.
+These binaries must be committed with git from a machine that can push blobs:
+
+```bash
+git add docs/demo/*.png docs/demo/*.gif
+git commit -m "Add live pipeline demo media"
+```

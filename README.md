@@ -15,167 +15,136 @@ Copyright (C) 2026 AHMAD ALI PARR. Licensed under the GNU Affero General Public 
 
 ---
 
-## REPL demo
+## Live pipeline (real run)
 
-Interactive Read–Eval–Print loop over the pipeline (`ingress/repl.php`):
+Captured from this machine:
+
+```bash
+SCM_TRACE=1 perl perl/scm_supervisor.pl < fixtures/braid_relation.txt
+```
+
+![Live pipeline](docs/demo/pipeline-live.png)
+
+![Pipeline demo](docs/demo/pipeline-demo.gif)
+
+### Accept path — braid relation `s1 s2 s1` ≡ `s2 s1 s2`
+
+```text
+decode=OK
+adr=aaa9514fb476eebcd62586a45ee1dc7984f3fa70b012e649f5e92c240e2ce722
+policy=artin_equivalence
+invariant=1,2,3,-2,-1;1,2,-1;1
+optimize=permutation_bound:3
+ir=bc26c51bc246a38346ce348fa1550830f8c2e415a00eaacfcce417a50064d725
+merkle=b45834a8a2f6da40824701c9126b1db7c33770938c3048f17c778ac18d0af0a1
+xml=22860938fd130beefc95cf197606835f7d5c7fdbe2fc4d3d2c0cd3512fa6753c
+xslt=b660542e6bd5fec9a4f19cfd93ca70329e86da5af522d4695599b1bb1cc6f2b7
+native=37abd0c9dbaacc884a56a10908859145ed5100f418931309c6b8e60067c70d02
+cert=9df07b1e9e574269b89c0bc488dcd5233a3c35047ae12704c6cfdab5ceb9e22b
+ledger=computed
+ACCEPT: AUTHORIZED
+```
+
+### Deny path — inequivalent braid
+
+```text
+decode=OK
+adr=aaa9514fb476eebcd62586a45ee1dc7984f3fa70b012e649f5e92c240e2ce722
+REJECT: POLICY:no_trusted_equivalence
+```
+
+Policy fails closed **before** math seals or ledger append. No partial authority.
+
+### Three workspaces (same machine)
+
+| Workspace | Fixture | Policy reason | Result |
+|---|---|---|---|
+| BRAID | `braid_relation.txt` | `artin_equivalence` | `ACCEPT: AUTHORIZED` |
+| QUANTUM | `quantum_cnot.txt` | `clifford_equivalence` | `ACCEPT: AUTHORIZED` |
+| RECURRENCE | `recurrence_fib.txt` | `recurrence_recomputation` → `value=55` | `ACCEPT: AUTHORIZED` |
+
+---
+
+## REPL
 
 ![REPL demo](docs/demo/repl-demo.gif)
 
-```text
-scm> file fixtures/braid_valid.txt
-ACCEPT: AUTHORIZED
-
-scm> file fixtures/braid_unauthorized.txt
-REJECT: POLICY:no_trusted_equivalence
-
-scm> propose
-... SCM-CANVAS/1.0
-... TARGET s1 s2 s1
-... CANDIDATE s2 s1 s2
-... END
-ACCEPT: AUTHORIZED
-```
-
 ```bash
-make repl                    # direct mode (no socket)
-php ingress/repl.php --direct
-
-# or with the Unix-socket server
-php ingress/server.php &
+make repl                         # direct → supervisor
+php ingress/server.php &          # optional socket
 php ingress/repl.php
 ```
 
-### REPL commands
-
 | Command | Action |
 |---|---|
-| `help` | List commands |
-| `file <rel/path>` | Propose a canvas file (e.g. `fixtures/braid_valid.txt`) |
+| `file <rel/path>` | Propose a canvas fixture |
 | `propose` | Multi-line paste until `END` |
-| `generate [model]` | GGUF generate (default `snapkitty-merged.Q4_K_M.gguf`) |
-| `register <name> <abs>` | Register a local `.gguf` |
-| `models` | List registered weights |
-| `ping` | Health check |
-| `json {...}` | Raw JSON op |
+| `generate [model]` | GGUF generate (`snapkitty-merged.Q4_K_M.gguf`) |
+| `register <n> <abs>` | Register local `.gguf` |
+| `models` / `ping` / `json` | Inventory / health / raw op |
 | `quit` | Exit |
-
-Paste a full `SCM-CANVAS/1.0` … `END` record at the prompt; the loop reads until `END` and evaluates it.
 
 ---
 
 ## What the loop is made of
 
-### Read → Eval → Print (REPL)
+### Read → Eval → Print
 
 ```mermaid
 flowchart LR
   subgraph READ
-    A[stdin / paste] --> B{Starts with<br/>SCM-CANVAS/1.0?}
-    B -->|yes| C[Read lines until END]
-    B -->|no| D[Parse command]
-    D --> E[file / propose / generate / …]
+    A[stdin / paste] --> B{SCM-CANVAS/1.0?}
+    B -->|yes| C[Read until END]
+    B -->|no| D[Command]
   end
-
   subgraph EVAL
-    C --> F[Normalize canvas]
-    E --> G{op}
-    G -->|propose / file| F
-    G -->|generate| H[llama-cli + system prompt]
-    H --> I[Extract first canvas]
-    I --> F
+    C --> F[Normalize]
+    D --> G{op}
+    G -->|propose| F
+    G -->|generate| H[llama-cli]
+    H --> F
     F --> J[Pipeline]
   end
-
   subgraph PRINT
     J --> K{Decision}
-    K -->|ok| L["ACCEPT: AUTHORIZED"]
-    K -->|fail| M["REJECT: …"]
-    L --> N[stdout]
-    M --> N
+    K -->|ok| L[ACCEPT]
+    K -->|fail| M[REJECT]
   end
 ```
 
-### Pipeline (eval stages)
+### Pipeline stages (every accept)
 
 ```mermaid
 flowchart TB
-  IN[Canvas record<br/>STATUS must be UNVERIFIED] --> D1
-
+  IN[UNVERIFIED canvas] --> D1
   subgraph Decode
-    D1[Perl SCM::Decode]
-    D2[AWK canvas_decoder]
-    D1 --> AGREE{Fields agree?}
-    D2 --> AGREE
+    D1[Perl Decode] --> AGREE{agree?}
+    D2[AWK Decode] --> AGREE
   end
-
-  AGREE -->|no| R1[REJECT: DECODER_*]
-  AGREE -->|yes| ADR
-
-  ADR[ADR digest seal] -->|mismatch| R2[REJECT: ADR_SEAL]
-  ADR -->|ok| POL
-
-  POL[Policy deny-by-default] -->|denied| R3[REJECT: POLICY:…]
-  POL -->|ok| MATH
-
-  subgraph Math
-    MATH[Braid Artin / Quantum tableau / Recurrence]
-    BOUND[Bound: permutation BFS or Clifford distance]
-  end
-
-  MATH --> BOUND
-  BOUND -->|reject only| R4[REJECT: OPT:…]
-  BOUND --> HD
-
-  HD[HyperDAG + Merkle XML] --> XSLT[xsltproc canonicalize]
-  XSLT -->|fail| R5[REJECT: XSLT_FAIL]
-  XSLT --> C[Native C recomputation]
-  C -->|mismatch| R6[REJECT: NATIVE]
-  C -->|match| CER
-
-  CER[Ceremony optional] --> LED[Ledger append SHA-256]
+  AGREE -->|no| RX[REJECT]
+  AGREE -->|yes| ADR[ADR digest]
+  ADR -->|bad| RX
+  ADR --> POL[Policy]
+  POL -->|deny| RX
+  POL --> MATH[Artin / Clifford / Recurrence]
+  MATH --> BOUND[Bound]
+  BOUND --> HD[HyperDAG + Merkle XML]
+  HD --> XSLT[xsltproc]
+  XSLT --> C[Native C match]
+  C --> LED[Ledger]
   LED --> OK[ACCEPT: AUTHORIZED]
 ```
 
-### Production ingress topology
+### Ingress topology
 
 ```mermaid
 flowchart TB
-  subgraph Proposers
-    HUMAN[Human / REPL]
-    GGUF[Local GGUF<br/>snapkitty-merged]
-    EXT[External process]
-  end
-
-  HUMAN -->|file / paste / generate| REPL[ingress/repl.php]
-  GGUF -->|register + generate| SOCK
-  EXT -->|raw or JSON| SOCK
-  REPL -->|--direct| SUP[perl scm_supervisor.pl]
-  REPL -->|socket| SOCK[Unix socket<br/>run/scm.sock]
-  SOCK --> SRV[ingress/server.php]
-  SRV --> SUP
-  SUP --> PIPE[SCM::Pipeline]
-  PIPE --> LEDGER[(Ledger chain)]
-```
-
-### GGUF path (default model)
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant F as fetch_snapkitty_merged.sh
-  participant S as ingress server
-  participant L as llama-cli
-  participant P as Pipeline
-
-  U->>F: download + SHA-256 verify
-  F->>F: snapkitty-merged.Q4_K_M.gguf
-  U->>S: register_gguf (local path only)
-  U->>S: generate
-  S->>L: system_prompt + no tools
-  L-->>S: model text
-  S->>S: extract SCM-CANVAS … END
-  S->>P: same propose path
-  P-->>U: ACCEPT / REJECT
+  HUMAN[Human / REPL] --> REPL[repl.php]
+  GGUF[snapkitty-merged GGUF] --> SOCK
+  EXT[External] --> SOCK
+  REPL -->|direct| SUP[scm_supervisor.pl]
+  REPL --> SOCK[Unix socket]
+  SOCK --> SRV[server.php] --> SUP --> PIPE[SCM::Pipeline] --> L[(ledger)]
 ```
 
 ---
@@ -183,23 +152,16 @@ sequenceDiagram
 ## Quick start
 
 ```bash
-# tests (needs xsltproc + gcc)
 make test                 # 104/104
-make test-ingress         # socket smoke tests
-
-# REPL
+make test-ingress
 make repl
 
-# Unix-socket server
 php ingress/server.php
 php ingress/client.php --file fixtures/braid_valid.txt
 
-# Default GGUF (outside trust boundary)
 ./models/fetch_snapkitty_merged.sh --register
 php ingress/client.php --json '{"op":"generate","model":"snapkitty-merged.Q4_K_M.gguf"}'
 ```
-
-Accept prints `ACCEPT: AUTHORIZED`. Anything else is a rejection and a non-zero status.
 
 ```bash
 perl perl/scm_supervisor.pl < fixtures/braid_relation.txt
@@ -207,63 +169,55 @@ perl perl/policy_enforcer.pl BRAID 's1 s2 s1' 's2 s1 s2'
 perl bootstrap/run.pl bootstrap/accept_braid.cf
 ```
 
-The relation fixture is the one that used to be impossible under string compare: target `s1 s2 s1`, candidate `s2 s1 s2` — the same three-strand braid. `s1 s1 s2` is not, and it is denied.
-
 ---
 
-## What actually runs
+## Stage map
 
 | Stage | Where | Decision |
 |---|---|---|
-| Decode | `awk/canvas_decoder.awk` and `perl/SCM/Decode.pm` | Both must agree |
-| ADR seal | `adr/DIGEST` | Digest mismatch rejects everything |
+| Decode | `awk/canvas_decoder.awk` + `perl/SCM/Decode.pm` | Both must agree |
+| ADR seal | `adr/DIGEST` | Digest mismatch rejects |
 | Policy | `perl/SCM/Policy.pm` | Deny by default |
-| Braid equality | Artin action on F3 | Faithful for B3, not string compare |
-| Clifford equality | Tableau for H, X, Y, Z, S, SDG, CNOT, CZ | Up to global phase |
-| Recurrence | Exact integer recomputation | Bound ±1e9 |
-| Bound | Permutation BFS, or one-qubit Clifford distance | Can only reject |
-| Hypergraph | `perl/SCM/HyperDAG.pm` | Diagram plus invariant |
-| Projection | `xslt/canonicalize.xsl` via `xsltproc` | Terminating |
-| Native check | `compcert/scm_rt.c` compiled with gcc | Must match the Perl invariant |
-| Ceremony | `bootstrap/run.pl` | Skipped word is a rejection |
-| Ledger | `perl/SCM/Ledger.pm` | SHA-256 chain, tamper-evident |
+| Braid | Artin action on F3 | Faithful for B3 |
+| Quantum | Clifford tableau | Up to global phase |
+| Recurrence | Exact integer recompute | Bound ±1e9 |
+| Bound | Permutation BFS / Clifford distance | Can only reject |
+| Hypergraph | `perl/SCM/HyperDAG.pm` | Diagram + Merkle |
+| Projection | `xslt/canonicalize.xsl` | Via `xsltproc` |
+| Native | `compcert/scm_rt.c` + gcc | Must match Perl |
+| Ceremony | `bootstrap/run.pl` | Skipped word = reject |
+| Ledger | `perl/SCM/Ledger.pm` | SHA-256 chain |
 | Ingress | `ingress/server.php` | One propose → pipeline |
-| REPL | `ingress/repl.php` | Interactive read–eval–print |
+| REPL | `ingress/repl.php` | Interactive REPL |
 
-Workspaces are `BRAID`, `QUANTUM`, and `RECURRENCE`. Record format: [schemas/canvas_protocol.md](schemas/canvas_protocol.md).
-
----
-
-## Production ingress & model
-
-Unix-domain socket (PHP). One request → one accept/reject + ledger line.
-
-- Raw canvas body or JSON: `op=propose|generate|register_gguf|ping|list_models`
-- Default weights: **[Snapkitty/snapkitty-merged](https://huggingface.co/Snapkitty/snapkitty-merged)** (`snapkitty-merged.Q4_K_M.gguf`, SHA-256 verified by `models/fetch_snapkitty_merged.sh`)
-- **No HTTP download inside ingress** — fetch is a separate, auditable step
-- QEMU and Ollama dirs are **deprecated** fail-closed shims; isolation notes in `sandbox/`
-
-See [ingress/README.md](ingress/README.md) and [models/README.md](models/README.md).
+Workspaces: `BRAID`, `QUANTUM`, `RECURRENCE`. Format: [schemas/canvas_protocol.md](schemas/canvas_protocol.md).
 
 ---
 
-## Source present, not claimed executed here
+## Model
 
-These files are real and are not stubs. They are not claimed to have been run when the toolchain is absent:
+Default GGUF: **[Snapkitty/snapkitty-merged](https://huggingface.co/Snapkitty/snapkitty-merged)**  
+`snapkitty-merged.Q4_K_M.gguf` · SHA-256 `4d959da2985affc363c02784307ac135a69e77768d8d5475c6f15bb99560c59f`
 
-- `lean/Kernel.lean` — Artin check for Lean 4
-- `prolog/policy.pl` — deny-by-default theory
-- `ampl/braid_perm.mod` — permutation bound as an integer program (executed bound is the BFS)
-- CompCert-friendly C (bootstrap compiler is gcc)
+Fetch is **outside** the trust boundary (`models/fetch_snapkitty_merged.sh`). Ingress only accepts local paths with GGUF magic. Inference needs `llama-cli` / `SCM_LLAMA_BIN`.
 
 ---
 
 ## Boundaries
 
-Untrusted bytes are not interpolated into a shell. Children are started with argument vectors. A proposal with `STATUS` other than `UNVERIFIED` is rejected. Paths may not be absolute and may not contain `..`. The ADR digest is checked before policy, so a silent edit of the constitution fails closed.
+Untrusted bytes are never interpolated into a shell. Children use argument vectors. `STATUS` must be `UNVERIFIED`. Paths cannot be absolute or contain `..`. ADR is checked before policy — a silent constitutional edit fails closed. QEMU/Ollama dirs are deprecated DENY shims; see `sandbox/`.
+
+---
+
+## Formal sources (not required at runtime)
+
+- `lean/Kernel.lean` — Artin check  
+- `prolog/policy.pl` — deny-by-default theory  
+- `ampl/braid_perm.mod` — permutation bound (executed bound is BFS)  
+- CompCert-friendly C (bootstrap compiler: gcc)
 
 ---
 
 ## License
 
-GNU Affero General Public License v3.0 only. The full text is in [LICENSE](LICENSE).
+GNU Affero General Public License v3.0 only. Full text in [LICENSE](LICENSE).
