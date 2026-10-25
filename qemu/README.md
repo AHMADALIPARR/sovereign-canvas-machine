@@ -1,3 +1,10 @@
-# Guest gate
+# Guest gate (deprecated)
 
-`guest.conf` requires `net=none` and `tools=disabled`. `run-guest.sh` rejects hostfwd, smb, virtfs, and net arguments, then refuses to boot. It does not launch QEMU.
+**Deprecated.** Full-system QEMU is not the production isolation boundary.
+
+`run-guest.sh` still refuses network and tool devices and does not boot a
+guest. That behaviour is retained for the suite. For production isolation of
+a local generator, see `sandbox/README.md` (bubblewrap / Firecracker with
+`net=none`).
+
+Proposal ingress is `ingress/` (Unix socket), not a VM console.
