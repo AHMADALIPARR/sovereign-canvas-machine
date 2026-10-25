@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="520" viewBox="0 0 880 520">
+  <rect width="880" height="520" fill="#0d1117"/>
+  <text x="24" y="36" fill="#58a6ff" font-family="ui-monospace,monospace" font-size="16" font-weight="700">SCM live pipeline — braid_relation</text>
+  <text x="24" y="58" fill="#8b949e" font-family="ui-monospace,monospace" font-size="12">SCM_TRACE=1 perl perl/scm_supervisor.pl &lt; fixtures/braid_relation.txt</text>
+
+  <g font-family="ui-monospace,monospace" font-size="12">
+    <rect x="24" y="80" width="160" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="36" y="100" fill="#8b949e">1 decode</text>
+    <text x="36" y="116" fill="#3fb950">OK</text>
+
+    <rect x="204" y="80" width="200" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="216" y="100" fill="#8b949e">2 adr</text>
+    <text x="216" y="116" fill="#58a6ff">aaa9514f…e2ce722</text>
+
+    <rect x="424" y="80" width="200" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="436" y="100" fill="#8b949e">3 policy</text>
+    <text x="436" y="116" fill="#3fb950">artin_equivalence</text>
+
+    <rect x="644" y="80" width="212" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="656" y="100" fill="#8b949e">4 invariant</text>
+    <text x="656" y="116" fill="#d2a8ff">1,2,3,-2,-1;1,2,-1;1</text>
+
+    <rect x="24" y="150" width="200" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="36" y="170" fill="#8b949e">5 optimize</text>
+    <text x="36" y="186" fill="#58a6ff">permutation_bound:3</text>
+
+    <rect x="244" y="150" width="200" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="256" y="170" fill="#8b949e">6 merkle</text>
+    <text x="256" y="186" fill="#58a6ff">b45834a8…0af0a1</text>
+
+    <rect x="464" y="150" width="180" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="476" y="170" fill="#8b949e">7 xslt</text>
+    <text x="476" y="186" fill="#58a6ff">b660542e…</text>
+
+    <rect x="664" y="150" width="192" height="44" rx="6" fill="#161b22" stroke="#30363d"/>
+    <text x="676" y="170" fill="#8b949e">8 native C</text>
+    <text x="676" y="186" fill="#58a6ff">37abd0c9…</text>
+
+    <rect x="24" y="220" width="832" height="56" rx="8" fill="#033a16" stroke="#238636"/>
+    <text x="40" y="252" fill="#3fb950" font-size="18" font-weight="700">ACCEPT: AUTHORIZED</text>
+    <text x="40" y="268" fill="#8b949e" font-size="11">cert=9df07b1e… · ledger=computed · target s1 s2 s1 ≡ candidate s2 s1 s2</text>
+  </g>
+
+  <text x="24" y="320" fill="#f85149" font-family="ui-monospace,monospace" font-size="14" font-weight="700">Deny path (braid_unauthorized)</text>
+  <rect x="24" y="336" width="832" height="48" rx="8" fill="#3d1214" stroke="#da3633"/>
+  <text x="40" y="358" fill="#f85149" font-family="ui-monospace,monospace" font-size="13">decode=OK · adr=aaa9514f… · REJECT: POLICY:no_trusted_equivalence</text>
+  <text x="40" y="374" fill="#8b949e" font-family="ui-monospace,monospace" font-size="11">stops before math / merkle / ledger — fail closed</text>
+
+  <text x="24" y="420" fill="#8b949e" font-family="ui-monospace,monospace" font-size="12">Workspaces verified on same host:</text>
+  <text x="24" y="442" fill="#3fb950" font-family="ui-monospace,monospace" font-size="12">BRAID artin_equivalence · QUANTUM clifford_equivalence · RECURRENCE value=55</text>
+  <text x="24" y="480" fill="#484f58" font-family="ui-monospace,monospace" font-size="11">Hashes from a real SCM_TRACE run — not placeholders.</text>
+</svg>
