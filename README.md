@@ -25,6 +25,7 @@ Copyright (C) 2026 AHMAD ALI PARR. Licensed under the GNU Affero General Public 
 | Native check | `compcert/scm_rt.c` compiled with gcc | Must match the Perl invariant |
 | Ceremony | `bootstrap/run.pl` | Skipped word is a rejection |
 | Ledger | `perl/SCM/Ledger.pm` | SHA-256 chain, tamper-evident |
+| Ingress | `ingress/server.php` (Unix socket) | One propose → pipeline |
 
 Workspaces are `BRAID`, `QUANTUM`, and `RECURRENCE`. The record format is [schemas/canvas_protocol.md](schemas/canvas_protocol.md).
 
@@ -50,7 +51,23 @@ These files are real and are not stubs. They are also not claimed to have been r
 - `prolog/policy.pl` — the same check as a deny-by-default theory.
 - `ampl/braid_perm.mod` — the permutation lower bound as an integer program. The executed bound is the BFS.
 - CompCert. The C is written in a subset CompCert can compile. The bootstrap compiler is gcc, and an accept does not become a CompCert certificate because gcc succeeded.
-- QEMU and Ollama. Both wrappers refuse to start. `net=none`, tools disabled, tool-call syntax denied.
+- Lean / Prolog / AMPL as above.
+
+## Production ingress
+
+Unix-domain socket (PHP). One request → one accept/reject + ledger line.
+
+```bash
+php ingress/server.php
+php ingress/client.php --file fixtures/braid_valid.txt
+php ingress/client.php --json '{"op":"ping","reply":"json"}'
+```
+
+- Raw canvas body or JSON (`op=propose|generate|register_gguf|ping|list_models`)
+- Optional local GGUF: register a file under `models/`, generate only through the fixed system prompt (requires `llama-cli` / `SCM_LLAMA_BIN`)
+- QEMU and Ollama directories are **deprecated** fail-closed shims; isolation guidance is in `sandbox/`
+
+See [ingress/README.md](ingress/README.md).
 
 ## Boundaries
 
