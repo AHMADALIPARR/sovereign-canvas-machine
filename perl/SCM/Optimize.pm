@@ -6,10 +6,10 @@
 package SCM::Optimize;
 use strict;
 use warnings;
-use SCM::Braid qw(parse_gens permutation);
+use SCM::Braid qw(parse_gens parse_gens_strict permutation equivalent);
 use SCM::Quantum qw(parse_gates tableau_key distance1);
 use Exporter 'import';
-our @EXPORT_OK = qw(bound);
+our @EXPORT_OK = qw(bound optimize_exact);
 
 # Necessary-condition bounds. This stage never grants authority.
 # It can only reject a proposal that violates a bound the math stage
@@ -49,6 +49,65 @@ sub bound {
         return (1, 'exact_recomputation', $f->{order} + 0);
     }
     return (0, 'unknown_workspace', 0);
+}
+
+# Exact optimizer for BRAID words (the bound stage above is necessary
+# conditions only; this is the stage that actually selects a minimum).
+# Enumerates all signed-generator words up to max_length, including the
+# empty word, checks Artin equivalence against the target, and selects
+# the minimum by (weighted cost, word length, lexical order). Only a
+# completed enumeration reports OPTIMAL_WITHIN_BOUNDS; a budget-exhausted
+# search reports INCOMPLETE_SEARCH with the best valid candidate found.
+# A partial search is never labeled globally optimal. Costs are
+# caller-supplied ({s1, s2, s1_inv, s2_inv}); missing entries default
+# to 1. Returns (status, word_string, cost, candidates_examined).
+sub optimize_exact {
+    my ($target, $costs, $max_length, $max_candidates) = @_;
+    my $t = ref($target) eq 'ARRAY' ? $target : parse_gens_strict($target);
+    return ('INVALID_TARGET', '', 0, 0) unless defined $t;
+    return ('INVALID_BOUND', '', 0, 0)
+        unless defined $max_length && $max_length =~ /^\d+$/;
+    $max_candidates = 1_000_000 unless defined $max_candidates;
+    my @gens = (1, -1, 2, -2);
+    my %cost = (s1 => 1, s2 => 1, s1_inv => 1, s2_inv => 1, %{$costs // {}});
+    my %name = (1 => 's1', -1 => 's1_inv', 2 => 's2', -2 => 's2_inv');
+    my $best;
+    my $examined = 0;
+    my $complete = 1;
+    for my $len (0 .. $max_length) {
+        my @words = ([]);
+        for my $pos (1 .. $len) {
+            my @next;
+            for my $w (@words) {
+                for my $g (@gens) {
+                    push @next, [ @$w, $g ];
+                }
+            }
+            @words = @next;
+        }
+        for my $word (@words) {
+            $examined++;
+            if ($examined > $max_candidates) {
+                $complete = 0;
+                last;
+            }
+            next unless equivalent($t, $word);
+            my $c = 0;
+            $c += $cost{ $name{$_} } for @$word;
+            my $ws = join ',', map { $name{$_} } @$word;
+            my $cand = { word => $ws, cost => $c, length => scalar @$word };
+            if (!defined $best
+                || $cand->{cost} < $best->{cost}
+                || ($cand->{cost} == $best->{cost} && $cand->{length} < $best->{length})
+                || ($cand->{cost} == $best->{cost} && $cand->{length} == $best->{length} && $cand->{word} lt $best->{word})) {
+                $best = $cand;
+            }
+        }
+        last unless $complete;
+    }
+    return ('NO_CANDIDATE', '', 0, $examined) unless defined $best;
+    return ($complete ? 'OPTIMAL_WITHIN_BOUNDS' : 'INCOMPLETE_SEARCH',
+        $best->{word}, $best->{cost}, $examined);
 }
 
 sub _perm_shortest {

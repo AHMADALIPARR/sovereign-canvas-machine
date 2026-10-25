@@ -12,7 +12,7 @@ use File::Temp qw(tempdir);
 use SCM::Decode qw(decode awk_decode fields_canon);
 use SCM::Policy qw(decide);
 use SCM::Optimize qw(bound);
-use SCM::HyperDAG qw(build);
+use SCM::HyperDAG qw(build canon_xml verify_xml_hashes);
 use SCM::Braid qw(parse_gens invariant);
 use SCM::Quantum qw(parse_gates tableau_key);
 use SCM::ADR qw(check);
@@ -64,9 +64,20 @@ sub run {
 
     my $hd = build($f, $inv);
     push @trace, "ir=$hd->{sha256}";
+    push @trace, "merkle=$hd->{merkle}";
 
-    my $xml = _xml($f, $inv);
-    push @trace, 'xslt=perl-bootstrap:' . sha256_hex($xml);
+    # The canonical XML tree is the diagram, not a summary of it: nodes,
+    # hyperedges, continuity edges, anyon trajectories, and every Merkle
+    # hash. It must verify from its own bytes before anything downstream
+    # trusts it, and the XSLT projection must be produced by xsltproc
+    # itself, not by a Perl re-implementation claiming to be XSLT.
+    my $xml = $hd->{xml};
+    my ($vok, $vwhy) = verify_xml_hashes($xml);
+    return _rej("XML_MERKLE:$vwhy", \@trace) unless $vok;
+    push @trace, 'xml=' . sha256_hex($xml);
+    my $cert_xml = _xslt($root, $xml);
+    return _rej('XSLT_FAIL', \@trace) unless defined $cert_xml;
+    push @trace, 'xslt=' . sha256_hex($cert_xml);
 
     my $native = _lower($root, $f);
     return _rej("NATIVE:$native->{error}", \@trace) unless $native->{ok};
@@ -78,6 +89,7 @@ sub run {
         "intent=$f->{intent}",
         "workspace=$f->{workspace}",
         "invariant=$inv",
+        "merkle=$hd->{merkle}",
         "native=matched",
         "policy=$preason",
         '',
@@ -138,22 +150,31 @@ sub _invariant {
     return;
 }
 
-sub _xml {
-    my ($f, $inv) = @_;
-    return '<?xml version="1.0"?>'
-      . '<scm v="1">'
-      . '<intent>' . _xe($f->{intent}) . '</intent>'
-      . '<workspace>' . _xe($f->{workspace}) . '</workspace>'
-      . '<invariant>' . _xe($inv) . '</invariant>'
-      . '</scm>';
-}
-
-sub _xe {
-    my ($s) = @_;
-    $s =~ s/&/&/g;
-    $s =~ s/</</g;
-    $s =~ s/>/>/g;
-    return $s;
+# Canonicalization by the stylesheet itself. Pipeline writes the Merkle
+# XML tree to a temp file, runs xsltproc on it (no shell: the argument
+# list is passed directly to exec), and reads the certificate back. Any
+# failure -- missing stylesheet, missing xsltproc, nonzero exit, unreadable
+# output -- rejects the proposal with XSLT_FAIL. There is no Perl
+# re-implementation standing in for the stylesheet: the trace hash is the
+# hash of what xsltproc actually produced.
+sub _xslt {
+    my ($root, $xml) = @_;
+    my $xsl = File::Spec->catfile($root, 'xslt', 'canonicalize.xsl');
+    return unless -f $xsl;
+    my $dir = tempdir('scm-xslt-XXXX', DIR => '/tmp', CLEANUP => 1);
+    my $in  = File::Spec->catfile($dir, 'tree.xml');
+    my $out = File::Spec->catfile($dir, 'cert.xml');
+    my $err = File::Spec->catfile($dir, 'xslt.err');
+    open my $fh, '>', $in or return;
+    print {$fh} $xml;
+    close $fh;
+    my $rc = _exec(['xsltproc', $xsl, $in], $out, $err);
+    return if $rc != 0;
+    open my $of, '<', $out or return;
+    local $/;
+    my $data = <$of>;
+    close $of;
+    return $data;
 }
 
 sub _lower {

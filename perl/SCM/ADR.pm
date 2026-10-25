@@ -44,7 +44,11 @@ sub check {
     my $sealed = <$fh>;
     close $fh;
     $sealed =~ s/\s+\z//;
-    my $got = digest($root);
+    # Fail closed: an unreadable ADR directory must reject the proposal,
+    # not crash the pipeline. digest() dies on opendir failure, so catch
+    # it here and turn it into a denial.
+    my $got = eval { digest($root) };
+    return (0, 'adr_unreadable') if $@ || !defined $got;
     return (0, 'adr_mismatch') unless $sealed eq $got;
     return (1, $got);
 }

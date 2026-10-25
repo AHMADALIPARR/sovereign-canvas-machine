@@ -7,7 +7,8 @@ package SCM::Quantum;
 use strict;
 use warnings;
 use Exporter 'import';
-our @EXPORT_OK = qw(parse_gates tableau_key equivalent distance1);
+our @EXPORT_OK = qw(parse_gates parse_gates_strict tableau_key equivalent
+    distance1 inverse_circuit gate_count);
 
 # Clifford tableau. A Pauli on n<=4 qubits is i^p * tensor_q (X^{x_q} Z^{z_q}),
 # with X before Z on each qubit. Conjugation by each allowed gate is tracked
@@ -43,6 +44,49 @@ sub parse_gates {
         }
     }
     return @g;
+}
+
+# Strict parse: undef on an invalid token, an array reference otherwise.
+# The empty string is a valid circuit (the identity), NOT an error, so it
+# must be distinguishable from a failed parse. parse_gates (above) cannot
+# make that distinction, which is why equivalent() used to reject the
+# identity outright, including identity == identity.
+sub parse_gates_strict {
+    my ($s, $nq) = @_;
+    my @g;
+    for my $tok (split / /, $s // '') {
+        if ($tok =~ /^(H|X|Y|Z|S|SDG):(\d+)$/) {
+            return if $2 >= $nq;
+            push @g, [ $1, $2 + 0 ];
+        } elsif ($tok =~ /^(CNOT|CZ):(\d+):(\d+)$/) {
+            return if $2 == $3 || $2 >= $nq || $3 >= $nq;
+            push @g, [ $1, $2 + 0, $3 + 0 ];
+        } else {
+            return;
+        }
+    }
+    return \@g;
+}
+
+# Inverse circuit: reverse order, invert each gate. X, Y, Z, H, CNOT, CZ
+# are self-inverse; S inverts to SDG and SDG to S.
+my %INV_GATE = (H => 'H', X => 'X', Y => 'Y', Z => 'Z',
+    S => 'SDG', SDG => 'S', CNOT => 'CNOT', CZ => 'CZ');
+
+sub inverse_circuit {
+    my ($gates) = @_;
+    my @inv;
+    for my $g (reverse @$gates) {
+        my ($op, @a) = @$g;
+        return unless exists $INV_GATE{$op};
+        push @inv, [ $INV_GATE{$op}, @a ];
+    }
+    return \@inv;
+}
+
+sub gate_count {
+    my ($gates) = @_;
+    return scalar @$gates;
 }
 
 sub gate_images {
@@ -118,10 +162,10 @@ sub tableau_key {
 
 sub equivalent {
     my ($n, $a, $b) = @_;
-    my @ga = ref($a) eq 'ARRAY' ? @$a : parse_gates($a, $n);
-    my @gb = ref($b) eq 'ARRAY' ? @$b : parse_gates($b, $n);
-    return 0 unless @ga && @gb;
-    return tableau_key($n, @ga) eq tableau_key($n, @gb);
+    my $ga = ref($a) eq 'ARRAY' ? $a : parse_gates_strict($a, $n);
+    my $gb = ref($b) eq 'ARRAY' ? $b : parse_gates_strict($b, $n);
+    return 0 unless defined $ga && defined $gb;
+    return tableau_key($n, @$ga) eq tableau_key($n, @$gb);
 }
 
 # Exact distance on one qubit over the allowed gate set. The group is finite
