@@ -3,10 +3,16 @@
 
 ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 
-.PHONY: test clean
+.PHONY: test test-ingress clean ingress
 
 test:
 	cd $(ROOT) && perl tests/suite.pl
 
+test-ingress:
+	cd $(ROOT) && php tests/test_ingress.php
+
+ingress:
+	cd $(ROOT) && php ingress/server.php
+
 clean:
-	rm -rf $(ROOT)/build $(ROOT)/ledger/chain.jsonl
+	rm -rf $(ROOT)/build $(ROOT)/run/scm.sock $(ROOT)/ledger/chain.jsonl

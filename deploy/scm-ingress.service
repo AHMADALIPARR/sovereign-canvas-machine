@@ -1,0 +1,28 @@
+[Unit]
+Description=Sovereign Canvas Machine ingress (Unix socket)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/scm
+Environment=SCM_ROOT=/opt/scm
+Environment=SCM_SOCK=/opt/scm/run/scm.sock
+# Optional: Environment=SCM_LLAMA_BIN=/usr/local/bin/llama-cli
+# Optional: Environment=SCM_GGUF_ALLOW_PREFIX=/var/lib/scm/uploads
+# Optional: Environment=SCM_LEDGER=/var/lib/scm/ledger/chain.jsonl
+ExecStart=/usr/bin/php /opt/scm/ingress/server.php
+Restart=on-failure
+RestartSec=2
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/scm/run /opt/scm/models /var/lib/scm
+RestrictAddressFamilies=AF_UNIX AF_UNIX
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target
